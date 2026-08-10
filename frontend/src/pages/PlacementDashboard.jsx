@@ -19,9 +19,10 @@ export default function PlacementDashboard() {
       api.get("/jobs"),
       api.get("/applications/analytics"),
     ]);
-    setJobs(jobsRes.data);
+    setJobs(jobsRes.data.jobs || (Array.isArray(jobsRes.data) ? jobsRes.data : []));
     setStats(statsRes.data);
   };
+
 
   useEffect(() => { load(); }, []);
 

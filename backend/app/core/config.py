@@ -10,7 +10,12 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL: str = "claude-sonnet-4-6"
 
+    REDIS_URL: str = ""
+    SYNC_INTERVAL_HOURS: int = 6
+    DEFAULT_JOB_BOARDS: str = "cloudflare,gitlab,stripe,figma,hashicorp,leverdemo"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 
 settings = Settings()

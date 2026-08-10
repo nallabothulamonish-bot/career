@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +10,16 @@ from app.db.database import Base, engine
 from app.models import user, student_profile, job, application, resume_analysis, mock_interview, assessment  # noqa: F401
 
 from app.routers import auth, students, jobs, applications, resume, interview, chatbot, assessments
+from app.services.job_sync import run_job_sync_pipeline
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Creates tables if they don't exist yet
+    # Creates database tables if they don't exist
     Base.metadata.create_all(bind=engine)
+    
+    # Trigger background ATS job sync non-blockingly on startup
+    asyncio.create_task(asyncio.to_thread(run_job_sync_pipeline))
     yield
 
 
@@ -27,7 +32,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 
 @app.get("/api/health")
@@ -43,4 +47,3 @@ app.include_router(resume.router)
 app.include_router(interview.router)
 app.include_router(chatbot.router)
 app.include_router(assessments.router)
-

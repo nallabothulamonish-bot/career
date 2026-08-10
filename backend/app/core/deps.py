@@ -30,3 +30,19 @@ def require_role(*roles: str):
             raise HTTPException(status_code=403, detail="Forbidden: insufficient role")
         return user
     return checker
+
+
+def get_optional_current_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if creds is None:
+        return None
+    payload = decode_access_token(creds.credentials)
+    if not payload or "sub" not in payload:
+        return None
+    try:
+        return db.query(User).filter(User.id == int(payload["sub"])).first()
+    except Exception:
+        return None
+
