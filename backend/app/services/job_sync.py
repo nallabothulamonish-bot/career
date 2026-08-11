@@ -242,66 +242,84 @@ def sync_jobs_to_db(db: Session, fetched_jobs: List[Dict[str, Any]]) -> Dict[str
 
         existing = existing_map.get(key)
         if existing:
-            existing.title = job_data["title"][:95]
-            existing.company = job_data["company"][:95]
-            existing.location = job_data["location"][:95]
-            existing.job_type = job_data["job_type"][:45]
-            existing.description = job_data["description"]
-            existing.requirements = job_data["requirements"]
-            existing.skills = job_data["skills"]
-            existing.required_skills = job_data["skills"]
-            existing.application_url = job_data["application_url"][:490]
-            existing.is_remote = job_data["is_remote"]
-            existing.is_active = True
-            existing.last_checked_at = now
-            updated_count += 1
+            try:
+                existing.title = (job_data.get("title") or "")[:95]
+                existing.company = (job_data.get("company") or "Company")[:95]
+                existing.location = (job_data.get("location") or "Remote")[:95]
+                existing.job_type = (job_data.get("job_type") or "Full-Time")[:45]
+                existing.description = job_data.get("description") or ""
+                existing.requirements = job_data.get("requirements") or "See official posting for full details."
+                existing.skills = job_data.get("skills") if job_data.get("skills") is not None else []
+                existing.required_skills = job_data.get("required_skills") if job_data.get("required_skills") is not None else (job_data.get("skills") or [])
+                existing.application_url = (job_data.get("application_url") or "")[:490]
+                existing.is_remote = bool(job_data.get("is_remote")) if job_data.get("is_remote") is not None else False
+                existing.expires_at = job_data.get("expires_at", None)
+                existing.application_deadline = job_data.get("application_deadline", None)
+                existing.is_active = True
+                existing.last_checked_at = now
+                db.commit()
+                updated_count += 1
+            except Exception as update_err:
+                db.rollback()
+                logger.error(f"Error updating job source_job_id='{source_job_id}': {update_err}")
         else:
             new_job = Job(
                 source=source,
                 source_job_id=source_job_id,
-                company=job_data["company"][:95],
-                title=job_data["title"][:95],
-                location=job_data["location"][:95],
-                job_type=job_data["job_type"][:45],
-                description=job_data["description"],
-                requirements=job_data["requirements"],
-                skills=job_data["skills"],
-                required_skills=job_data["skills"],
-                application_url=job_data["application_url"][:490],
-                is_remote=job_data["is_remote"],
-                posted_at=job_data["posted_at"],
+                company=(job_data.get("company") or "Company")[:95],
+                title=(job_data.get("title") or "")[:95],
+                location=(job_data.get("location") or "Remote")[:95],
+                job_type=(job_data.get("job_type") or "Full-Time")[:45],
+                description=job_data.get("description") or "",
+                requirements=job_data.get("requirements") or "See official posting for full details.",
+                skills=job_data.get("skills") if job_data.get("skills") is not None else [],
+                required_skills=job_data.get("required_skills") if job_data.get("required_skills") is not None else (job_data.get("skills") or []),
+                application_url=(job_data.get("application_url") or "")[:490],
+                is_remote=bool(job_data.get("is_remote")) if job_data.get("is_remote") is not None else False,
+                posted_at=job_data.get("posted_at") or now,
+                expires_at=job_data.get("expires_at", None),
+                application_deadline=job_data.get("application_deadline", None),
                 last_checked_at=now,
                 is_active=True,
             )
             new_objects.append(new_job)
-            existing_map[key] = new_job
-            added_count += 1
 
-    try:
-        db.commit()
-        if new_objects:
-            chunk_size = 100
-            for i in range(0, len(new_objects), chunk_size):
-                db.add_all(new_objects[i : i + chunk_size])
+    # Insert new objects with chunked batching and per-job fallback
+    if new_objects:
+        chunk_size = 50
+        for i in range(0, len(new_objects), chunk_size):
+            chunk = new_objects[i : i + chunk_size]
+            try:
+                db.add_all(chunk)
                 db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Batch insert error: {e}")
+                added_count += len(chunk)
+            except Exception as chunk_err:
+                db.rollback()
+                logger.warning(f"Chunk commit failed ({chunk_err}). Falling back to per-record insert...")
+                for job_obj in chunk:
+                    try:
+                        db.add(job_obj)
+                        db.commit()
+                        added_count += 1
+                    except Exception as single_err:
+                        db.rollback()
+                        logger.error(f"Skipping malformed job source_job_id='{job_obj.source_job_id}': {single_err}")
 
-    # 3. Mark jobs no longer returned by external ATS as inactive
+    # 3. Mark jobs no longer returned by external ATS as inactive (ONLY if fetch succeeded and active_source_ids is non-empty)
     deactivated_count = 0
-    try:
-        external_jobs = db.query(Job).filter(Job.source.in_(synced_sources), Job.is_active == True).all()
-        for ej in external_jobs:
-            if (ej.source, ej.source_job_id) not in active_source_ids:
-                ej.is_active = False
-                ej.last_checked_at = now
-                deactivated_count += 1
-        if deactivated_count:
-            db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error marking inactive jobs: {e}")
+    if fetched_jobs and active_source_ids:
+        try:
+            external_jobs = db.query(Job).filter(Job.source.in_(synced_sources), Job.is_active == True).all()
+            for ej in external_jobs:
+                if (ej.source, ej.source_job_id) not in active_source_ids:
+                    ej.is_active = False
+                    ej.last_checked_at = now
+                    deactivated_count += 1
+            if deactivated_count:
+                db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error marking inactive jobs: {e}")
 
     # Log specific requirements
     logger.info(f"{added_count} jobs inserted")

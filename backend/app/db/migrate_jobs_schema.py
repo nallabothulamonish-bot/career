@@ -2,8 +2,9 @@
 Idempotent Production Schema Migration for CareerPilot 'jobs' Table.
 
 Safely inspects the production database table (MySQL, PostgreSQL, or SQLite)
-and adds any missing columns, indexes, and unique constraints required by the updated
-Job SQLAlchemy model without dropping tables or losing existing data.
+and adds any missing columns, modifies non-nullable columns to allow NULLs (e.g. application_deadline),
+and creates missing indexes/unique constraints required by the updated Job SQLAlchemy model
+without dropping tables or losing existing data.
 """
 import logging
 from typing import Dict, Any, List
@@ -135,11 +136,13 @@ COLUMN_DEFINITIONS: Dict[str, Dict[str, str]] = {
 
 def migrate_jobs_schema() -> Dict[str, Any]:
     """
-    Idempotently checks the database schema for table 'jobs'
-    and adds missing columns, indexes, and unique constraints.
+    Idempotently checks the database schema for table 'jobs',
+    adds missing columns, alters columns to allow NULLs where optional,
+    and creates missing indexes and unique constraints.
     """
     logger.info("Starting jobs schema migration check...")
     added_columns: List[str] = []
+    modified_columns: List[str] = []
 
     try:
         # 1. Ensure table structure is created if non-existent
@@ -148,24 +151,41 @@ def migrate_jobs_schema() -> Dict[str, Any]:
         inspector = inspect(engine)
         if not inspector.has_table("jobs"):
             logger.info("Table 'jobs' was freshly created by Base.metadata.create_all.")
-            return {"status": "success", "added_columns": [], "message": "Fresh table created."}
+            return {"status": "success", "added_columns": [], "modified_columns": [], "message": "Fresh table created."}
 
-        existing_columns = {col["name"].lower() for col in inspector.get_columns("jobs")}
+        existing_columns_map = {col["name"].lower(): col for col in inspector.get_columns("jobs")}
+        existing_column_names = set(existing_columns_map.keys())
         dialect_name = engine.dialect.name.lower()
         if dialect_name not in ["mysql", "postgresql", "sqlite"]:
-            dialect_name = "mysql"  # Fallback standard
+            dialect_name = "mysql"
 
         with engine.begin() as connection:
             # 2. Add missing columns safely
             for col_name, dialect_defs in COLUMN_DEFINITIONS.items():
-                if col_name.lower() not in existing_columns:
+                if col_name.lower() not in existing_column_names:
                     col_type_sql = dialect_defs.get(dialect_name, dialect_defs["mysql"])
                     alter_query = f"ALTER TABLE jobs ADD COLUMN {col_name} {col_type_sql}"
                     logger.info(f"Adding missing column '{col_name}' to 'jobs' table: {alter_query}")
                     connection.execute(text(alter_query))
                     added_columns.append(col_name)
 
-            # 3. Add missing indexes idempotently
+            # 3. Modify existing optional columns to ensure they allow NULL values (e.g. application_deadline, expires_at, posted_at)
+            nullable_optional_fields = ["application_deadline", "expires_at", "posted_at", "last_checked_at", "posted_by"]
+            for col_name in nullable_optional_fields:
+                if col_name.lower() in existing_columns_map:
+                    col_info = existing_columns_map[col_name.lower()]
+                    if col_info.get("nullable") == False:
+                        try:
+                            if dialect_name == "mysql":
+                                connection.execute(text(f"ALTER TABLE jobs MODIFY COLUMN {col_name} DATETIME NULL"))
+                            elif dialect_name == "postgresql":
+                                connection.execute(text(f"ALTER TABLE jobs ALTER COLUMN {col_name} DROP NOT NULL"))
+                            logger.info(f"Modified column '{col_name}' in 'jobs' table to allow NULL values.")
+                            modified_columns.append(col_name)
+                        except Exception as mod_err:
+                            logger.warning(f"Notice modifying column '{col_name}' nullability: {mod_err}")
+
+            # 4. Add missing indexes idempotently
             existing_indexes = {idx["name"].lower() for idx in inspector.get_indexes("jobs") if idx.get("name")}
             
             indexes_to_create = [
@@ -189,7 +209,7 @@ def migrate_jobs_schema() -> Dict[str, Any]:
                     except Exception as idx_err:
                         logger.warning(f"Notice creating index '{idx_name}': {idx_err}")
 
-            # 4. Add unique constraint uix_source_source_job_id idempotently
+            # 5. Add unique constraint uix_source_source_job_id idempotently
             try:
                 unique_constraints = {uc["name"].lower() for uc in inspector.get_unique_constraints("jobs") if uc.get("name")}
             except Exception:
@@ -208,6 +228,7 @@ def migrate_jobs_schema() -> Dict[str, Any]:
         summary = {
             "status": "success",
             "added_columns": added_columns,
+            "modified_columns": modified_columns,
             "count_added": len(added_columns),
             "dialect": dialect_name,
         }
@@ -216,7 +237,7 @@ def migrate_jobs_schema() -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Jobs schema migration failed: {e}")
-        return {"status": "error", "error": str(e), "added_columns": added_columns}
+        return {"status": "error", "error": str(e), "added_columns": added_columns, "modified_columns": modified_columns}
 
 
 if __name__ == "__main__":

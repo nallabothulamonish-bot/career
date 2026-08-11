@@ -47,15 +47,16 @@ class JobOut(BaseModel):
     source_job_id: str = ""
     company: str
     title: str
-    location: str
-    job_type: str
-    description: str
-    requirements: str = ""
-    skills: List[str] = []
-    required_skills: List[str] = []
+    location: Optional[str] = "Remote"
+    job_type: Optional[str] = "Full-Time"
+    description: Optional[str] = ""
+    requirements: Optional[str] = ""
+    skills: Optional[List[str]] = []
+    required_skills: Optional[List[str]] = []
     application_url: str = ""
     posted_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
+    application_deadline: Optional[datetime] = None
     last_checked_at: Optional[datetime] = None
     is_active: bool = True
     is_remote: bool = False

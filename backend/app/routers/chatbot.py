@@ -17,7 +17,7 @@ def chat(
     user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db)
 ):
-    user_id = int(user.id) if user and user.id is not None else None
+    user_id = user.id if user else None
     return get_chatbot_reply(
         message=payload.message,
         db=db,
