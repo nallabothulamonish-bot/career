@@ -1,20 +1,26 @@
+from typing import Optional
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.user import User
-from app.core.deps import get_current_user
+from app.core.deps import get_optional_current_user
+from app.schemas.chatbot import ChatRequest, ChatResponse
 from app.services.chatbot_engine import get_chatbot_reply
 
 router = APIRouter(prefix="/api/chatbot", tags=["chatbot"])
 
 
-class ChatRequest(BaseModel):
-    message: str
-
-
-@router.post("")
-def chat(payload: ChatRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    reply = get_chatbot_reply(payload.message, db, user.id)
-    return {"reply": reply}
+@router.post("", response_model=ChatResponse)
+def chat(
+    payload: ChatRequest,
+    user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    user_id = int(user.id) if user and user.id is not None else None
+    return get_chatbot_reply(
+        message=payload.message,
+        db=db,
+        user_id=user_id,
+        session_id=payload.session_id
+    )

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func
+from sqlalchemy import or_, and_, func, case
 
 from app.db.database import get_db
 from app.models.user import User
@@ -16,6 +16,46 @@ from app.services.job_sync import run_job_sync_pipeline
 from app.services.recommendation_engine import compute_job_match
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+
+
+def _apply_priority_sorting(query):
+    india_case = case(
+        (
+            or_(
+                Job.location.ilike("%india%"),
+                Job.location.ilike("%bengaluru%"),
+                Job.location.ilike("%bangalore%"),
+                Job.location.ilike("%hyderabad%"),
+                Job.location.ilike("%chennai%"),
+                Job.location.ilike("%pune%"),
+                Job.location.ilike("%mumbai%"),
+                Job.location.ilike("%gurugram%"),
+                Job.location.ilike("%gurgaon%"),
+                Job.location.ilike("%noida%"),
+                Job.location.ilike("%remote%"),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+    tech_fresher_case = case(
+        (
+            or_(
+                Job.job_type.ilike("%intern%"),
+                Job.title.ilike("%intern%"),
+                Job.title.ilike("%graduate%"),
+                Job.title.ilike("%associate%"),
+                Job.title.ilike("%fresher%"),
+                Job.title.ilike("%software%"),
+                Job.title.ilike("%engineer%"),
+                Job.title.ilike("%developer%"),
+                Job.title.ilike("%analyst%"),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+    return query.order_by(india_case.desc(), tech_fresher_case.desc(), Job.posted_at.desc(), Job.id.desc())
 
 
 def _paginate_query(query, page: int = 1, limit: int = 20) -> tuple[int, int, List[Job]]:
@@ -58,7 +98,7 @@ def list_jobs(
     if skills:
         q = q.filter(Job.description.ilike(f"%{skills}%"))
 
-    q = q.order_by(Job.posted_at.desc(), Job.id.desc())
+    q = _apply_priority_sorting(q)
     total, total_pages, jobs = _paginate_query(q, page, limit)
 
     job_outs = []
@@ -136,7 +176,7 @@ def search_jobs(
         elif posted_date == "30d":
             query = query.filter(Job.posted_at >= now - timedelta(days=30))
 
-    query = query.order_by(Job.posted_at.desc())
+    query = _apply_priority_sorting(query)
     total, total_pages, jobs = _paginate_query(query, page, limit)
 
     student_profile = None

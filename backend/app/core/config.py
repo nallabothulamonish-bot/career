@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = ""
     SYNC_INTERVAL_HOURS: int = 6
-    DEFAULT_JOB_BOARDS: str = "cloudflare,gitlab,stripe,figma,hashicorp,leverdemo"
+    DEFAULT_JOB_BOARDS: str = "cloudflare,gitlab,stripe,figma,canonical,elastic,mongodb,pinterest,airbnb,okta,databricks,reddit,dropbox,palantir,spotify,cred"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -66,3 +66,26 @@ def generate_answer_feedback(question: str, answer: str, category: str) -> dict 
         return json.loads(text.strip().strip("`").replace("json\n", "", 1))
     except Exception:
         return None
+
+
+def generate_career_assistant_reply(user_message: str, intent: str, db_summary: str) -> str | None:
+    if not _client:
+        return None
+    try:
+        prompt = (
+            f"You are CareerPilot AI, an intelligent career advisor and placement consultant.\n"
+            f"User Intent: {intent}\n"
+            f"Database Context / Matches: {db_summary}\n"
+            f"User Question: {user_message}\n\n"
+            f"Provide a helpful, concise (2-3 sentences max) response summarizing the finding or advice professionally."
+        )
+        resp = _client.messages.create(
+            model=settings.LLM_MODEL,
+            max_tokens=250,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(block.text for block in resp.content if hasattr(block, "text"))
+        return text.strip() if text else None
+    except Exception:
+        return None
+

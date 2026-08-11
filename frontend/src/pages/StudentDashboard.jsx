@@ -148,7 +148,7 @@ export default function StudentDashboard() {
           <div className="flex items-center justify-between border-b border-gray-200 mb-6">
             <div className="flex gap-2">
               {[
-                { key: "jobs", label: `Active Opportunities (${totalJobs})` },
+                { key: "jobs", label: loading && totalJobs === 0 ? "Active Opportunities (...)" : `Active Opportunities (${totalJobs})` },
                 { key: "applications", label: `My Applications (${applications.length})` },
               ].map((t) => (
                 <button

@@ -8,10 +8,10 @@ export default function JobCard({ job, actionSlot, index = 0 }) {
   const getSourceBadge = () => {
     const src = (job.source || "manual").toLowerCase();
     if (src === "greenhouse") {
-      return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center gap-1"><Globe size={11} /> Greenhouse ATS</span>;
+      return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center gap-1"><Globe size={11} /> Official Greenhouse</span>;
     }
     if (src === "lever") {
-      return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 flex items-center gap-1"><Globe size={11} /> Lever ATS</span>;
+      return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 flex items-center gap-1"><Globe size={11} /> Official Lever</span>;
     }
     return <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/60 flex items-center gap-1"><Building2 size={11} /> Campus Drive</span>;
   };
