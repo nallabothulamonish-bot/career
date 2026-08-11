@@ -12,7 +12,7 @@ from app.models.student_profile import StudentProfile
 from app.schemas.job import JobCreate, JobUpdate, JobOut, PaginatedJobsOut
 from app.core.deps import get_current_user, require_role, get_optional_current_user
 from app.services.cache_service import cache_service
-from app.services.job_sync import run_job_sync_pipeline
+from app.services.job_sync import run_job_sync_pipeline, get_sync_status
 from app.services.recommendation_engine import compute_job_match
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -255,6 +255,11 @@ def list_companies(db: Session = Depends(get_db)):
     companies = [{"company": r[0], "active_jobs": r[1]} for r in results]
     cache_service.set("companies:list", companies, ttl_seconds=600)
     return companies
+
+
+@router.get("/sync/status")
+def get_job_sync_status(db: Session = Depends(get_db)):
+    return get_sync_status(db)
 
 
 @router.post("/sync")

@@ -10,7 +10,8 @@ from app.db.database import Base, engine
 from app.models import user, student_profile, job, application, resume_analysis, mock_interview, assessment  # noqa: F401
 
 from app.routers import auth, students, jobs, applications, resume, interview, chatbot, assessments
-from app.services.job_sync import run_job_sync_pipeline
+import threading
+from app.services.job_sync import auto_sync_on_startup
 
 
 @asynccontextmanager
@@ -18,8 +19,8 @@ async def lifespan(app: FastAPI):
     # Creates database tables if they don't exist
     Base.metadata.create_all(bind=engine)
     
-    # Trigger background ATS job sync non-blockingly on startup
-    asyncio.create_task(asyncio.to_thread(run_job_sync_pipeline))
+    # Trigger non-blocking ATS startup check and 6-hour scheduler
+    threading.Thread(target=auto_sync_on_startup, daemon=True, name="StartupSyncThread").start()
     yield
 
 
