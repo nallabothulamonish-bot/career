@@ -10,16 +10,21 @@ from app.db.database import Base, engine
 from app.models import user, student_profile, job, application, resume_analysis, mock_interview, assessment  # noqa: F401
 
 from app.routers import auth, students, jobs, applications, resume, interview, chatbot, assessments
+from app.db.migrate_jobs_schema import migrate_jobs_schema
 import threading
 from app.services.job_sync import auto_sync_on_startup
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Creates database tables if they don't exist
-    Base.metadata.create_all(bind=engine)
+    # 1. Creates database tables if non-existent & idempotently migrates jobs table schema
+    try:
+        Base.metadata.create_all(bind=engine)
+        migrate_jobs_schema()
+    except Exception as e:
+        print(f"Startup jobs schema migration notice: {e}")
     
-    # Trigger non-blocking ATS startup check and 6-hour scheduler
+    # 2. Trigger non-blocking ATS startup check and 6-hour scheduler
     threading.Thread(target=auto_sync_on_startup, daemon=True, name="StartupSyncThread").start()
     yield
 
